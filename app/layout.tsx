@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LayoutDashboard, ListFilter, TrendingUp, Wallet } from "lucide-react";
+import { LayoutDashboard, ListFilter, TrendingUp, Wallet, GitCompare } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Poly Signal Dashboard",
@@ -35,6 +35,9 @@ export default function RootLayout({
             </NavLink>
             <NavLink href="/wallets" icon={<Wallet size={16} />}>
               Wallets
+            </NavLink>
+            <NavLink href="/versions" icon={<GitCompare size={16} />}>
+              Versions
             </NavLink>
           </aside>
           <main className="flex-1 p-8 overflow-auto">{children}</main>

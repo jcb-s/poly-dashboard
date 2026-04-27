@@ -42,6 +42,7 @@ export type Signal = {
   resolved: boolean;
   outcome_won: boolean | null;
   pnl_pct: string | null;
+  bot_version: string | null;
   created_at: string;
   updated_at: string;
 };

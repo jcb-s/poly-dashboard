@@ -18,6 +18,7 @@ type SearchParams = {
   direction?: string;
   min_edge?: string;
   sort?: string;
+  version?: string;
 };
 
 export default async function SignalsPage({
@@ -49,6 +50,10 @@ export default async function SignalsPage({
       values.push(minEdge / 100);
     }
   }
+  if (params.version && params.version !== "all") {
+    where.push(`bot_version = $${i++}`);
+    values.push(params.version);
+  }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const sortMap: Record<string, string> = {
@@ -72,6 +77,9 @@ export default async function SignalsPage({
   const directions = await query<{ direction: string }>(
     `SELECT DISTINCT direction FROM signals ORDER BY direction`
   );
+  const versions = await query<{ bot_version: string }>(
+    `SELECT DISTINCT bot_version FROM signals WHERE bot_version IS NOT NULL ORDER BY bot_version DESC`
+  );
 
   return (
     <div className="space-y-6">
@@ -86,6 +94,7 @@ export default async function SignalsPage({
       <SignalsFilters
         types={types.map((t) => t.signal_type)}
         directions={directions.map((d) => d.direction)}
+        versions={versions.map((v) => v.bot_version)}
       />
 
       <div className="rounded-lg border bg-card overflow-x-auto">
