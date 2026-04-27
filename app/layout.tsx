@@ -4,8 +4,8 @@ import Link from "next/link";
 import { LayoutDashboard, ListFilter, TrendingUp, Wallet, GitCompare } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Poly Signal Dashboard",
-  description: "Polymarket edge signals dashboard",
+  title: "DUB",
+  description: "DUB trading bot dashboard",
 };
 
 export default function RootLayout({
@@ -19,9 +19,9 @@ export default function RootLayout({
         <div className="min-h-screen flex">
           <aside className="w-60 border-r bg-muted/30 p-4 flex flex-col gap-1">
             <div className="px-3 py-4 mb-2">
-              <h1 className="text-lg font-semibold">Poly Signal</h1>
+              <h1 className="text-lg font-semibold">DUB</h1>
               <p className="text-xs text-muted-foreground">
-                Edge dashboard
+                Trading bot dashboard
               </p>
             </div>
             <NavLink href="/" icon={<LayoutDashboard size={16} />}>
