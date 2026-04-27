@@ -86,7 +86,7 @@ export default async function OverviewPage() {
     query<PnlPoint>(`
       SELECT
         TO_CHAR(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
-        SUM(pnl_pct::numeric) OVER (ORDER BY date_trunc('day', created_at)) AS cumulative_pnl
+        SUM(pnl_pct::numeric) OVER (ORDER BY date_trunc('day', created_at))::float8 AS cumulative_pnl
       FROM signals
       WHERE resolved = true AND pnl_pct IS NOT NULL
       ORDER BY day
