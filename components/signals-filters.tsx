@@ -29,8 +29,32 @@ export function SignalsFilters({
 
   const get = (key: string) => searchParams.get(key) ?? "";
 
+  const status = get("status") || "all";
+
+  const statusPills: { value: string; label: string; active: string; inactive: string }[] = [
+    { value: "all", label: "All", active: "bg-foreground text-background", inactive: "border hover:bg-accent" },
+    { value: "open", label: "Open", active: "bg-gray-600 text-white", inactive: "border hover:bg-accent" },
+    { value: "won", label: "Won", active: "bg-green-600 text-white", inactive: "border hover:bg-accent" },
+    { value: "lost", label: "Lost", active: "bg-red-600 text-white", inactive: "border hover:bg-accent" },
+    { value: "resolved", label: "Resolved", active: "bg-gray-500 text-white", inactive: "border hover:bg-accent" },
+  ];
+
   return (
-    <div className="flex flex-wrap gap-3 p-4 bg-muted/30 rounded-lg border">
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {statusPills.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => setParam("status", p.value)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              status === p.value ? p.active : p.inactive
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-3 p-4 bg-muted/30 rounded-lg border">
       <Select
         label="Type"
         value={get("type") || "all"}
@@ -38,18 +62,6 @@ export function SignalsFilters({
         options={[
           { value: "all", label: "All types" },
           ...types.map((t) => ({ value: t, label: signalTypeLabel(t) })),
-        ]}
-      />
-      <Select
-        label="Status"
-        value={get("status") || "all"}
-        onChange={(v) => setParam("status", v)}
-        options={[
-          { value: "all", label: "All" },
-          { value: "open", label: "Open" },
-          { value: "resolved", label: "Resolved" },
-          { value: "won", label: "Won" },
-          { value: "lost", label: "Lost" },
         ]}
       />
       <Select
@@ -100,6 +112,7 @@ export function SignalsFilters({
           Clear
         </button>
       )}
+    </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { query, type Signal } from "@/lib/db";
 import { StatCard } from "@/components/stat-card";
 import { SignalsOverTimeChart } from "@/components/signals-over-time-chart";
 import { EdgeDistributionChart } from "@/components/edge-distribution-chart";
+import { PnlChart } from "@/components/pnl-chart";
 import { formatPct, formatPnl, signalTypeColor, signalTypeLabel, formatDate } from "@/lib/utils";
 import Link from "next/link";
 
@@ -31,8 +32,13 @@ type EdgeBucket = {
   count: number;
 };
 
+type PnlPoint = {
+  day: string;
+  cumulative_pnl: number;
+};
+
 export default async function OverviewPage() {
-  const [summaryRows, byTypeRows, dailyRows, edgeRows, recentSignals] = await Promise.all([
+  const [summaryRows, byTypeRows, dailyRows, edgeRows, recentSignals, pnlRows] = await Promise.all([
     query<Summary>(`
       SELECT
         COUNT(*)::int AS total,
@@ -76,6 +82,14 @@ export default async function OverviewPage() {
       SELECT * FROM signals
       ORDER BY created_at DESC
       LIMIT 8
+    `),
+    query<PnlPoint>(`
+      SELECT
+        TO_CHAR(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
+        SUM(pnl_pct::numeric) OVER (ORDER BY date_trunc('day', created_at)) AS cumulative_pnl
+      FROM signals
+      WHERE resolved = true AND pnl_pct IS NOT NULL
+      ORDER BY day
     `),
   ]);
 
@@ -178,6 +192,11 @@ export default async function OverviewPage() {
           <h2 className="text-sm font-semibold mb-4">Edge distribution</h2>
           <EdgeDistributionChart data={edgeRows} />
         </div>
+      </div>
+
+      <div className="rounded-lg border bg-card p-5">
+        <h2 className="text-sm font-semibold mb-4">Cumulative P&L (resolved signals)</h2>
+        <PnlChart data={pnlRows} />
       </div>
 
       <div className="rounded-lg border bg-card">

@@ -54,3 +54,16 @@ export function signalTypeColor(type: string): string {
   };
   return map[type.toLowerCase()] ?? "bg-gray-100 text-gray-800";
 }
+
+export function confidenceScore(edge: number | string | null): {
+  label: string;
+  className: string;
+} {
+  if (edge === null || edge === undefined) return { label: "—", className: "text-muted-foreground" };
+  const e = typeof edge === "string" ? parseFloat(edge) : edge;
+  if (isNaN(e)) return { label: "—", className: "text-muted-foreground" };
+  if (e >= 0.15) return { label: "Very High", className: "text-green-700 font-semibold" };
+  if (e >= 0.10) return { label: "High", className: "text-green-600" };
+  if (e >= 0.07) return { label: "Medium", className: "text-yellow-600" };
+  return { label: "Low", className: "text-muted-foreground" };
+}

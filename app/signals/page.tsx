@@ -6,6 +6,7 @@ import {
   formatPrice,
   signalTypeColor,
   signalTypeLabel,
+  confidenceScore,
 } from "@/lib/utils";
 import { SignalsFilters } from "@/components/signals-filters";
 
@@ -100,6 +101,7 @@ export default async function SignalsPage({
               <th className="text-right p-3 font-medium">Current</th>
               <th className="text-center p-3 font-medium">Status</th>
               <th className="text-right p-3 font-medium">P&L</th>
+              <th className="text-center p-3 font-medium">Confidence</th>
               <th className="text-right p-3 font-medium">When</th>
             </tr>
           </thead>
@@ -157,6 +159,12 @@ export default async function SignalsPage({
                 >
                   {formatPnl(s.pnl_pct)}
                 </td>
+                <td className="p-3 text-center text-xs">
+                  {(() => {
+                    const c = confidenceScore(s.edge);
+                    return <span className={c.className}>{c.label}</span>;
+                  })()}
+                </td>
                 <td className="p-3 text-right text-muted-foreground text-xs whitespace-nowrap">
                   {formatDate(s.created_at)}
                 </td>
@@ -165,7 +173,7 @@ export default async function SignalsPage({
             {signals.length === 0 && (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={11}
                   className="p-12 text-center text-muted-foreground"
                 >
                   No signals match your filters.
