@@ -30,6 +30,7 @@ export function formatPnl(value: number | string | null): string {
 export function formatDate(value: string): string {
   const d = new Date(value);
   return d.toLocaleString("en-US", {
+    timeZone: "America/Los_Angeles",
     month: "short",
     day: "numeric",
     hour: "numeric",
