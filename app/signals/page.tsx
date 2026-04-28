@@ -77,10 +77,6 @@ export default async function SignalsPage({
   const directions = await query<{ direction: string }>(
     `SELECT DISTINCT direction FROM signals ORDER BY direction`
   );
-  const versions = await query<{ bot_version: string }>(
-    `SELECT DISTINCT bot_version FROM signals WHERE bot_version IS NOT NULL ORDER BY bot_version DESC`
-  );
-
   return (
     <div className="space-y-6">
       <div>
@@ -94,7 +90,6 @@ export default async function SignalsPage({
       <SignalsFilters
         types={types.map((t) => t.signal_type)}
         directions={directions.map((d) => d.direction)}
-        versions={versions.map((v) => v.bot_version)}
       />
 
       <div className="rounded-lg border bg-card overflow-x-auto">

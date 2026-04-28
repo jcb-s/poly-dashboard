@@ -7,11 +7,9 @@ import { signalTypeLabel } from "@/lib/utils";
 export function SignalsFilters({
   types,
   directions,
-  versions,
 }: {
   types: string[];
   directions: string[];
-  versions: string[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -93,17 +91,6 @@ export function SignalsFilters({
           }}
         />
       </div>
-      {versions.length > 0 && (
-        <Select
-          label="Version"
-          value={get("version") || "all"}
-          onChange={(v) => setParam("version", v)}
-          options={[
-            { value: "all", label: "All versions" },
-            ...versions.map((v) => ({ value: v, label: `v${v}` })),
-          ]}
-        />
-      )}
       <Select
         label="Sort"
         value={get("sort") || "newest"}
