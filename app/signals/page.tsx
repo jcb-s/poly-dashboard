@@ -50,9 +50,12 @@ export default async function SignalsPage({
       values.push(minEdge / 100);
     }
   }
-  if (params.version && params.version !== "all" && params.version !== "lifetime") {
+  // No version param means the navbar defaulted to 2.0.0 (it deletes the param for that value).
+  // Only "lifetime" bypasses the filter.
+  const versionFilter = params.version ?? "2.0.0";
+  if (versionFilter !== "lifetime") {
     where.push(`COALESCE(bot_version, '1.0.0') = $${i++}`);
-    values.push(params.version);
+    values.push(versionFilter);
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
