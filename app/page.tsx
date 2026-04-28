@@ -1,9 +1,8 @@
 import { query, type Signal } from "@/lib/db";
 import { StatCard } from "@/components/stat-card";
 import { SignalsOverTimeChart } from "@/components/signals-over-time-chart";
-import { EdgeDistributionChart } from "@/components/edge-distribution-chart";
-import { PnlChart } from "@/components/pnl-chart";
-import { formatPct, formatPnl, signalTypeColor, signalTypeLabel, formatDate } from "@/lib/utils";
+import { WinRateChart, type WinRateData } from "@/components/win-rate-chart";
+import { formatPct, formatPnl, signalTypeLabel, signalTypeColor, formatDate } from "@/lib/utils";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -17,28 +16,29 @@ type Summary = {
   total_pnl: string | null;
 };
 
-type ByType = {
-  signal_type: string;
-  count: number;
-};
-
 type DailyCount = {
   day: string;
   count: number;
 };
 
-type EdgeBucket = {
-  bucket: string;
-  count: number;
+type WinRateByType = {
+  signal_type: string;
+  resolved_count: number;
+  win_count: number;
 };
 
-type PnlPoint = {
-  day: string;
-  cumulative_pnl: number;
-};
+export default async function OverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ version?: string }>;
+}) {
+  const params = await searchParams;
+  const v = params.version ?? "2.0.0";
+  const byVer = v !== "lifetime";
+  const vf = byVer ? `AND COALESCE(bot_version, '1.0.0') = $1` : "";
+  const vp: string[] = byVer ? [v] : [];
 
-export default async function OverviewPage() {
-  const [summaryRows, byTypeRows, dailyRows, edgeRows, recentSignals, pnlRows] = await Promise.all([
+  const [summaryRows, dailyRows, winRateRows, recentSignals] = await Promise.all([
     query<Summary>(`
       SELECT
         COUNT(*)::int AS total,
@@ -48,49 +48,47 @@ export default async function OverviewPage() {
         AVG(edge)::text AS avg_edge,
         SUM(pnl_pct)::text AS total_pnl
       FROM signals
-    `),
-    query<ByType>(`
-      SELECT signal_type, COUNT(*)::int AS count
-      FROM signals
-      GROUP BY signal_type
-      ORDER BY count DESC
-    `),
+      WHERE 1=1 ${vf}
+    `, vp),
+
     query<DailyCount>(`
       SELECT
         TO_CHAR(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
         COUNT(*)::int AS count
       FROM signals
-      WHERE created_at > NOW() - INTERVAL '30 days'
+      WHERE created_at > NOW() - INTERVAL '30 days' ${vf}
       GROUP BY 1
       ORDER BY 1
-    `),
-    query<EdgeBucket>(`
+    `, vp),
+
+    query<WinRateByType>(`
       SELECT
-        CASE
-          WHEN edge < 0.05 THEN '4-5%'
-          WHEN edge < 0.07 THEN '5-7%'
-          WHEN edge < 0.10 THEN '7-10%'
-          WHEN edge < 0.15 THEN '10-15%'
-          ELSE '15%+'
-        END AS bucket,
-        COUNT(*)::int AS count
+        signal_type,
+        COUNT(*) FILTER (WHERE resolved)::int AS resolved_count,
+        COUNT(*) FILTER (WHERE outcome_won = true)::int AS win_count
       FROM signals
-      GROUP BY 1
-      ORDER BY MIN(edge)
-    `),
+      WHERE 1=1 ${vf}
+      GROUP BY signal_type
+      ORDER BY resolved_count DESC
+    `, vp),
+
     query<Signal>(`
-      SELECT * FROM signals
-      ORDER BY created_at DESC
-      LIMIT 8
-    `),
-    query<PnlPoint>(`
-      SELECT
-        TO_CHAR(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
-        SUM(pnl_pct::numeric) OVER (ORDER BY date_trunc('day', created_at))::float8 AS cumulative_pnl
-      FROM signals
-      WHERE resolved = true AND pnl_pct IS NOT NULL
-      ORDER BY day
-    `),
+      WITH deduped AS (
+        SELECT DISTINCT ON (
+          market_slug,
+          direction,
+          (EXTRACT(EPOCH FROM created_at)::bigint / 300)
+        ) *
+        FROM signals
+        WHERE 1=1 ${vf}
+        ORDER BY
+          market_slug,
+          direction,
+          (EXTRACT(EPOCH FROM created_at)::bigint / 300),
+          created_at DESC
+      )
+      SELECT * FROM deduped ORDER BY created_at DESC LIMIT 8
+    `, vp),
   ]);
 
   const summary = summaryRows[0] ?? {
@@ -105,49 +103,53 @@ export default async function OverviewPage() {
   const winRate =
     summary.resolved > 0 ? summary.wins / summary.resolved : null;
 
+  const winRateData: WinRateData[] = winRateRows.map((r) => ({
+    type: signalTypeLabel(r.signal_type),
+    win_rate: r.resolved_count > 0 ? (r.win_count / r.resolved_count) * 100 : 0,
+    resolved_count: r.resolved_count,
+    win_count: r.win_count,
+  }));
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Overview</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          All signals fired by the bot
+        <h1 className="text-xl font-semibold">Overview</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {byVer ? `v${v}` : "All time"} · {summary.total} signals
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total signals" value={summary.total.toLocaleString()} />
+      {/* Row 1: Stat cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
-          label="Open"
-          value={summary.open.toLocaleString()}
-          sublabel={`${summary.resolved} resolved`}
+          compact
+          label="Total signals"
+          value={summary.total.toLocaleString()}
+          sublabel={`${summary.open} open`}
         />
         <StatCard
+          compact
           label="Win rate"
           value={winRate !== null ? formatPct(winRate, 1) : "—"}
           sublabel={
             summary.resolved > 0
-              ? `${summary.wins}/${summary.resolved}`
+              ? `${summary.wins}/${summary.resolved} resolved`
               : "no resolved yet"
           }
           valueClassName={
-            winRate === null
-              ? ""
-              : winRate >= 0.5
-              ? "text-success"
-              : "text-danger"
+            winRate === null ? "" : winRate >= 0.5 ? "text-success" : "text-danger"
           }
         />
         <StatCard
+          compact
           label="Avg edge"
           value={summary.avg_edge ? formatPct(summary.avg_edge) : "—"}
         />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <StatCard
+          compact
           label="Total P&L"
           value={summary.total_pnl ? formatPnl(summary.total_pnl) : "—"}
-          sublabel="sum across resolved signals"
+          sublabel="resolved signals"
           valueClassName={
             !summary.total_pnl
               ? ""
@@ -156,106 +158,97 @@ export default async function OverviewPage() {
               : "text-danger"
           }
         />
-        <div className="rounded-lg border bg-card p-5">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            By category
-          </div>
-          <div className="mt-3 space-y-2">
-            {byTypeRows.map((row) => (
-              <div
-                key={row.signal_type}
-                className="flex items-center justify-between text-sm"
-              >
-                <span
-                  className={`px-2 py-0.5 rounded text-xs font-medium ${signalTypeColor(
-                    row.signal_type
-                  )}`}
-                >
-                  {signalTypeLabel(row.signal_type)}
+      </div>
+
+      {/* Row 2: Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="rounded-lg border bg-card p-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+            Signals (30d)
+          </h2>
+          <SignalsOverTimeChart data={dailyRows} height={180} />
+        </div>
+        <div className="rounded-lg border bg-card p-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+            Win rate by type
+          </h2>
+          <WinRateChart data={winRateData} />
+          <div className="mt-3 space-y-1.5">
+            {winRateRows.map((r) => (
+              <div key={r.signal_type} className="flex items-center justify-between text-xs">
+                <span className={`px-1.5 py-0.5 rounded font-medium ${signalTypeColor(r.signal_type)}`}>
+                  {signalTypeLabel(r.signal_type)}
                 </span>
-                <span className="font-medium">{row.count}</span>
+                <span className="text-muted-foreground">
+                  {r.resolved_count > 0
+                    ? `${r.win_count}/${r.resolved_count} (${((r.win_count / r.resolved_count) * 100).toFixed(0)}%)`
+                    : "no resolved"}
+                </span>
               </div>
             ))}
-            {byTypeRows.length === 0 && (
-              <div className="text-sm text-muted-foreground">No signals yet</div>
+            {winRateRows.length === 0 && (
+              <div className="text-xs text-muted-foreground">No signals yet</div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-lg border bg-card p-5">
-          <h2 className="text-sm font-semibold mb-4">Signals over time (30d)</h2>
-          <SignalsOverTimeChart data={dailyRows} />
-        </div>
-        <div className="rounded-lg border bg-card p-5">
-          <h2 className="text-sm font-semibold mb-4">Edge distribution</h2>
-          <EdgeDistributionChart data={edgeRows} />
-        </div>
-      </div>
-
-      <div className="rounded-lg border bg-card p-5">
-        <h2 className="text-sm font-semibold mb-4">Cumulative P&L (resolved signals)</h2>
-        <PnlChart data={pnlRows} />
-      </div>
-
+      {/* Row 3: Recent signals */}
       <div className="rounded-lg border bg-card">
-        <div className="p-5 border-b flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Recent signals</h2>
+        <div className="px-4 py-3 border-b flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Recent signals
+          </h2>
           <Link
-            href="/signals"
-            className="text-xs text-muted-foreground hover:text-foreground"
+            href={byVer ? `/signals?version=${v}` : "/signals"}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             View all →
           </Link>
         </div>
-        <table className="w-full text-sm">
-          <thead className="text-xs text-muted-foreground bg-muted/50">
-            <tr>
-              <th className="text-left p-3 font-medium">Type</th>
-              <th className="text-left p-3 font-medium">Market</th>
-              <th className="text-left p-3 font-medium">Direction</th>
-              <th className="text-right p-3 font-medium">Edge</th>
-              <th className="text-right p-3 font-medium">When</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentSignals.map((s) => (
-              <tr key={s.id} className="border-t hover:bg-muted/30">
-                <td className="p-3">
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${signalTypeColor(
-                      s.signal_type
-                    )}`}
-                  >
-                    {signalTypeLabel(s.signal_type)}
-                  </span>
-                </td>
-                <td className="p-3 max-w-md truncate" title={s.market_question}>
-                  {s.market_question}
-                </td>
-                <td className="p-3 uppercase text-xs">{s.direction}</td>
-                <td className="p-3 text-right font-medium">
-                  {formatPct(s.edge)}
-                </td>
-                <td className="p-3 text-right text-muted-foreground text-xs">
-                  {formatDate(s.created_at)}
-                </td>
-              </tr>
-            ))}
-            {recentSignals.length === 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-muted-foreground bg-muted/50">
               <tr>
-                <td
-                  colSpan={5}
-                  className="p-8 text-center text-muted-foreground"
-                >
-                  No signals yet. Once your bot fires its first alert, it'll
-                  show up here.
-                </td>
+                <th className="text-left px-4 py-2 font-medium">Type</th>
+                <th className="text-left px-4 py-2 font-medium">Market</th>
+                <th className="text-left px-4 py-2 font-medium">Dir</th>
+                <th className="text-right px-4 py-2 font-medium">Edge</th>
+                <th className="text-right px-4 py-2 font-medium">When</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {recentSignals.map((s) => (
+                <tr key={s.id} className="border-t hover:bg-muted/30 transition-colors">
+                  <td className="px-4 py-2">
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${signalTypeColor(s.signal_type)}`}>
+                      {signalTypeLabel(s.signal_type)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 max-w-xs truncate text-xs" title={s.market_question ?? ""}>
+                    {s.market_question}
+                  </td>
+                  <td className="px-4 py-2 uppercase text-xs text-muted-foreground">
+                    {s.direction}
+                  </td>
+                  <td className="px-4 py-2 text-right font-medium text-xs">
+                    {formatPct(s.edge)}
+                  </td>
+                  <td className="px-4 py-2 text-right text-muted-foreground text-xs whitespace-nowrap">
+                    {formatDate(s.created_at)}
+                  </td>
+                </tr>
+              ))}
+              {recentSignals.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                    No signals yet. Once your bot fires its first alert, it&apos;ll show up here.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
