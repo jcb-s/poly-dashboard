@@ -5,7 +5,7 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 type VersionRow = {
-  bot_version: string;
+  bot_version: string | null;
   signal_count: number;
   resolved_count: number;
   win_count: number;
@@ -17,7 +17,7 @@ type VersionRow = {
 export default async function VersionsPage() {
   const rows = await query<VersionRow>(`
     SELECT
-      COALESCE(bot_version, '1.0.0')            AS bot_version,
+      bot_version,
       COUNT(*)::int                              AS signal_count,
       COUNT(*) FILTER (WHERE resolved)::int      AS resolved_count,
       COUNT(*) FILTER (WHERE outcome_won = true)::int AS win_count,
@@ -25,7 +25,7 @@ export default async function VersionsPage() {
       MIN(created_at)::text                      AS first_signal,
       MAX(created_at)::text                      AS last_signal
     FROM signals
-    GROUP BY COALESCE(bot_version, '1.0.0')
+    GROUP BY bot_version
     ORDER BY MAX(created_at) DESC
   `);
 
@@ -38,84 +38,88 @@ export default async function VersionsPage() {
         </p>
       </div>
 
-      <div className="rounded-lg border bg-card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-xs text-muted-foreground bg-muted/50">
-            <tr>
-              <th className="text-left p-3 font-medium">Version</th>
-              <th className="text-right p-3 font-medium">Signals</th>
-              <th className="text-right p-3 font-medium">Resolved</th>
-              <th className="text-right p-3 font-medium">Win Rate</th>
-              <th className="text-right p-3 font-medium">Net P&L</th>
-              <th className="text-right p-3 font-medium">First Signal</th>
-              <th className="text-right p-3 font-medium">Last Signal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const winRate =
-                r.resolved_count > 0 ? r.win_count / r.resolved_count : null;
-              const pnl = r.net_pnl !== null ? parseFloat(r.net_pnl) : null;
+      {rows.length === 0 ? (
+        <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">
+          No signals recorded yet.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {rows.map((r) => {
+            const versionLabel = r.bot_version ?? "unset";
+            const winRate =
+              r.resolved_count > 0 ? r.win_count / r.resolved_count : null;
+            const pnl = r.net_pnl !== null ? parseFloat(r.net_pnl) : null;
 
-              return (
-                <tr key={r.bot_version} className="border-t hover:bg-muted/30">
-                  <td className="p-3">
-                    <Link
-                      href={`/signals?version=${r.bot_version}`}
-                      className="font-mono text-xs font-semibold hover:underline"
+            return (
+              <div
+                key={versionLabel}
+                className="rounded-lg border bg-card p-5 space-y-4"
+              >
+                {/* Header */}
+                <div className="flex items-start justify-between">
+                  <Link
+                    href={`/signals?version=${versionLabel}`}
+                    className="font-mono text-xl font-bold hover:underline"
+                  >
+                    v{versionLabel}
+                  </Link>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {r.signal_count.toLocaleString()} signals
+                  </span>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-0.5">Resolved</div>
+                    <div className="text-lg font-semibold tabular-nums">
+                      {r.resolved_count.toLocaleString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-0.5">Win Rate</div>
+                    <div
+                      className={`text-lg font-semibold tabular-nums ${
+                        winRate === null
+                          ? "text-muted-foreground"
+                          : winRate >= 0.5
+                          ? "text-success"
+                          : "text-danger"
+                      }`}
                     >
-                      v{r.bot_version}
-                    </Link>
-                  </td>
-                  <td className="p-3 text-right tabular-nums">
-                    {r.signal_count.toLocaleString()}
-                  </td>
-                  <td className="p-3 text-right tabular-nums text-muted-foreground">
-                    {r.resolved_count.toLocaleString()}
-                  </td>
-                  <td
-                    className={`p-3 text-right tabular-nums font-medium ${
-                      winRate === null
-                        ? "text-muted-foreground"
-                        : winRate >= 0.5
-                        ? "text-green-700"
-                        : "text-red-600"
-                    }`}
-                  >
-                    {winRate !== null
-                      ? `${formatPct(winRate, 1)} (${r.win_count}/${r.resolved_count})`
-                      : "—"}
-                  </td>
-                  <td
-                    className={`p-3 text-right tabular-nums font-medium ${
-                      pnl === null
-                        ? "text-muted-foreground"
-                        : pnl >= 0
-                        ? "text-green-700"
-                        : "text-red-600"
-                    }`}
-                  >
-                    {pnl !== null ? formatPnl(pnl / 100) : "—"}
-                  </td>
-                  <td className="p-3 text-right text-muted-foreground text-xs whitespace-nowrap">
-                    {formatDate(r.first_signal)}
-                  </td>
-                  <td className="p-3 text-right text-muted-foreground text-xs whitespace-nowrap">
-                    {formatDate(r.last_signal)}
-                  </td>
-                </tr>
-              );
-            })}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={7} className="p-12 text-center text-muted-foreground">
-                  No signals recorded yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                      {winRate !== null ? formatPct(winRate, 1) : "—"}
+                    </div>
+                    {winRate !== null && (
+                      <div className="text-xs text-muted-foreground">
+                        {r.win_count}/{r.resolved_count}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-0.5">Net P&L</div>
+                    <div
+                      className={`text-lg font-semibold tabular-nums ${
+                        pnl === null
+                          ? "text-muted-foreground"
+                          : pnl >= 0
+                          ? "text-success"
+                          : "text-danger"
+                      }`}
+                    >
+                      {pnl !== null ? formatPnl(pnl / 100) : "—"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Date range */}
+                <div className="text-xs text-muted-foreground border-t pt-3">
+                  {formatDate(r.first_signal)} → {formatDate(r.last_signal)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

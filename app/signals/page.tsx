@@ -50,8 +50,8 @@ export default async function SignalsPage({
       values.push(minEdge / 100);
     }
   }
-  if (params.version && params.version !== "all") {
-    where.push(`bot_version = $${i++}`);
+  if (params.version && params.version !== "all" && params.version !== "lifetime") {
+    where.push(`COALESCE(bot_version, '1.0.0') = $${i++}`);
     values.push(params.version);
   }
 

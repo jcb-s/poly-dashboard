@@ -16,7 +16,17 @@ type PerfRow = {
   worst_pnl: string | null;
 };
 
-export default async function PerformancePage() {
+export default async function PerformancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ version?: string }>;
+}) {
+  const params = await searchParams;
+  const v = params.version ?? "2.0.0";
+  const byVer = v !== "lifetime";
+  const vf = byVer ? `WHERE COALESCE(bot_version, '1.0.0') = $1` : "";
+  const vp: string[] = byVer ? [v] : [];
+
   const rows = await query<PerfRow>(`
     SELECT
       signal_type,
@@ -30,9 +40,10 @@ export default async function PerformancePage() {
       MAX(pnl_pct)::text AS best_pnl,
       MIN(pnl_pct)::text AS worst_pnl
     FROM signals
+    ${vf}
     GROUP BY signal_type
     ORDER BY signal_type
-  `);
+  `, vp);
 
   const overall = rows.reduce(
     (acc, r) => {
@@ -51,7 +62,7 @@ export default async function PerformancePage() {
       <div>
         <h1 className="text-2xl font-semibold">Performance</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          How well each signal category is performing
+          {byVer ? `v${v}` : "All time"} · how well each signal category is performing
         </p>
       </div>
 
@@ -75,7 +86,7 @@ export default async function PerformancePage() {
               const winRate =
                 r.resolved > 0 ? r.wins / r.resolved : null;
               return (
-                <tr key={r.signal_type} className="border-t">
+                <tr key={r.signal_type} className="border-t hover:bg-muted/30">
                   <td className="p-3">
                     <span
                       className={`px-2 py-0.5 rounded text-xs font-medium ${signalTypeColor(
